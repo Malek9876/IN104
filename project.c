@@ -81,7 +81,7 @@ OsmGpsMapTrack* link_points(double lat1 ,double long1 ,double lat2 ,double long2
     return track;
 }
 
-// Function to plot points from a file
+// Function to plot tracks from a file
 void file_plot(char * filename, OsmGpsMap *map) {
 	double lat1, long1, lat2, long2;
 		OsmGpsMapTrack* track ;
