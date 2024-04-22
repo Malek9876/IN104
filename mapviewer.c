@@ -215,7 +215,7 @@ on_home_clicked_event (GtkWidget *widget, gpointer user_data)
     return FALSE;
 }
 
-static gboolean
+/*static gboolean
 on_cache_clicked_event (GtkWidget *widget, gpointer user_data)
 {
     OsmGpsMap *map = OSM_GPS_MAP(user_data);
@@ -229,7 +229,7 @@ on_cache_clicked_event (GtkWidget *widget, gpointer user_data)
         osm_gps_map_download_cancel_all(map);
     }
     return FALSE;
-}
+}*/
 
 static void
 on_tiles_queued_changed (OsmGpsMap *image, GParamSpec *pspec, gpointer user_data)
@@ -463,9 +463,9 @@ main (int argc, char **argv)
     g_signal_connect (
                 gtk_builder_get_object(builder, "home_button"), "clicked",
                 G_CALLBACK (on_home_clicked_event), (gpointer) map);
-    g_signal_connect (
+   /* g_signal_connect (
                 gtk_builder_get_object(builder, "cache_button"), "clicked",
-                G_CALLBACK (on_cache_clicked_event), (gpointer) map);
+                G_CALLBACK (on_cache_clicked_event), (gpointer) map);*/
     g_signal_connect (
                 gtk_builder_get_object(builder, "gps_alpha_adjustment"), "value-changed",
                 G_CALLBACK (on_gps_alpha_changed), (gpointer) map);
