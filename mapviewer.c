@@ -478,8 +478,7 @@ main (int argc, char **argv)
     g_signal_connect (
                 gtk_builder_get_object(builder, "star_yalign_adjustment"), "value-changed",
                 G_CALLBACK (on_star_align_changed), (gpointer) "y-align");
-    g_signal_connect (G_OBJECT (map), "button-press-event",
-                G_CALLBACK (on_button_press_event), (gpointer) rightclicktrack);
+    g_signal_connect(map, "button-press-event", G_CALLBACK(on_map_click), NULL);
     g_signal_connect (G_OBJECT (map), "changed",
                 G_CALLBACK (on_map_changed_event),
                 (gpointer) gtk_builder_get_object(builder, "text_entry"));
