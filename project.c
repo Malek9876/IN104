@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Malek Belkahla 2024 <malek.belkahla@etudiant-enit.utm.tn>
+ * Copyright (C) Malek Belkahla * Aziz Ben Amira * Elyes Bouaziz 2024 
  *
  * This is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License
@@ -18,8 +18,52 @@
 #include <gdk/gdkkeysyms.h>
 
 #include "osm-gps-map.h"
+#define R 6371 // Earth's radius in kilometers
 
-static OsmGpsMapSource_t opt_map_provider = OSM_GPS_MAP_SOURCE_GOOGLE_HYBRID;
+typedef struct Point {
+
+    double lat;
+
+    double lon;
+
+} Point;
+
+
+
+typedef struct Edge {
+
+    int dest;
+
+    double weight;
+
+    struct Edge* next;
+
+} Edge;
+
+
+
+
+
+typedef struct Graph {
+
+    int numVertices;
+
+    Point* vertices;
+
+    Edge** adjLists;
+
+} Graph;
+
+typedef struct {
+    Graph* graph;
+    int* list;
+    int void_pos;
+    
+    // Add other variables you need to pass here
+} CallbackData;
+
+
+static OsmGpsMapSource_t opt_map_provider = OSM_GPS_MAP_SOURCE_GOOGLE_STREET;
 static gboolean opt_friendly_cache = TRUE;
 static gboolean opt_no_cache = FALSE;
 static char * opt_cache_base_dir = NULL;
@@ -74,6 +118,188 @@ static GOptionEntry entries[] = {
     NULL
   }
 };
+// Function to covert Rad to Degrees 
+double toRadians(double degree) {
+  return degree * M_PI / 180.0;
+}
+
+// Function Haversine to calculate the distance between two points
+double haversine(double lat1, double lon1, double lat2, double lon2) {
+  lat1 = toRadians(lat1);
+  lon1 = toRadians(lon1);
+  lat2 = toRadians(lat2);
+  lon2 = toRadians(lon2);
+
+  double dlon = lon2 - lon1;
+  double dlat = lat2 - lat1;
+
+  double a = pow(sin(dlat / 2), 2) + cos(lat1) * cos(lat2) * pow(sin(dlon / 2), 2);
+  double c = 2 * atan2(sqrt(a), sqrt(1 - a));
+
+  return R * c;
+}
+// Function to plot all points
+void show_vertices ( Graph* graph){
+	for (int i = 0; i < graph->numVertices; i += 1)
+	  {
+	  	printf("lat : %f , lon : %f\n",graph->vertices[i].lat,graph->vertices[i].lon);
+		}
+		}
+
+Graph* createGraph(int numVertices) {
+
+    Graph* graph = malloc(sizeof(Graph));
+
+    graph->numVertices = numVertices;
+
+    graph->vertices = malloc(numVertices * sizeof(Point));
+
+    graph->adjLists = malloc(numVertices * sizeof(Edge*));
+
+    for (int i = 0; i < numVertices; i++) {
+
+        graph->adjLists[i] = NULL;
+
+        graph->vertices[i].lat = 0.000000 ;
+
+    }
+
+    return graph;
+
+}
+
+void addEdge(Graph* graph, int src, int dest) {
+
+    double lat1 = graph->vertices[src].lat;
+
+    double lon1 = graph->vertices[src].lon;
+
+    double lat2 = graph->vertices[dest].lat;
+
+    double lon2 = graph->vertices[dest].lon;
+
+
+
+    double weight = haversine(lat1,lon1,lat2,lon2);
+
+
+
+    Edge* newEdge = malloc(sizeof(Edge));
+
+    newEdge->dest = dest;
+
+    newEdge->weight = weight;
+
+    newEdge->next = graph->adjLists[src];
+
+    graph->adjLists[src] = newEdge;
+
+}
+
+void dijkstra(Graph* graph, int src, int dest,OsmGpsMap *map) {
+
+    int numVertices = graph->numVertices;
+
+    double dist[numVertices];
+
+    int sptSet[numVertices];
+
+    int predecessor[numVertices]; // Array to store predecessor of each node
+
+
+
+    for (int i = 0; i < numVertices; i++) {
+
+        dist[i] = INT_MAX;
+
+        sptSet[i] = 0;
+
+        predecessor[i] = -1; // Initialize predecessor array
+
+    }
+
+
+
+    dist[src] = 0;
+
+
+
+    for (int count = 0; count < numVertices - 1; count++) {
+
+        int u = -1;
+
+        for (int i = 0; i < numVertices; i++) {
+
+            if (!sptSet[i] && (u == -1 || dist[i] < dist[u])) {
+
+                u = i;
+
+            }
+
+        }
+
+
+
+        sptSet[u] = 1;
+
+
+
+        Edge* pCrawl = graph->adjLists[u];
+
+        while (pCrawl) {
+
+            int v = pCrawl->dest;
+
+            if (!sptSet[v] && dist[u] != INT_MAX && dist[u] + pCrawl->weight < dist[v]) {
+
+                dist[v] = dist[u] + pCrawl->weight;
+
+                predecessor[v] = u; // Update predecessor of v
+
+            }
+
+            pCrawl = pCrawl->next;
+
+        }
+
+    }
+
+
+
+    printf("Shortest distance from point A to point B is %f\n", dist[dest]);
+
+
+
+    // Reconstruct and print the path
+
+    if (predecessor[dest] != -1) {
+
+        printf("Path: ");
+
+        int current = dest;
+
+        while (current != src) {
+
+            printf("%d  -> ", current);
+
+            current = predecessor[current];
+
+            osm_gps_map_gps_add(map, graph->vertices[current].lat ,graph->vertices[current].lon , g_random_double_range(0, 360));
+
+            
+
+        }
+
+        printf("%d\n", src); // Print the source node
+
+    } else {
+
+        printf("No path exists.\n");
+
+    }
+
+}
+
 
 #if!GTK_CHECK_VERSION(3, 22, 0)
 // use --gtk-debug=updates instead on newer GTK
@@ -97,28 +323,9 @@ static GOptionEntry debug_entries[] = {
 
 static GdkPixbuf * g_star_image = NULL;
 static OsmGpsMapImage * g_last_image = NULL;
-#define R 6371 // Earth's radius in kilometers
 
-// Function to covert Rad to Degrees 
-double toRadians(double degree) {
-  return degree * M_PI / 180.0;
-}
 
-// Function Haversine to calculate the distance between two points
-double haversine(double lat1, double lon1, double lat2, double lon2) {
-  lat1 = toRadians(lat1);
-  lon1 = toRadians(lon1);
-  lat2 = toRadians(lat2);
-  lon2 = toRadians(lon2);
 
-  double dlon = lon2 - lon1;
-  double dlat = lat2 - lat1;
-
-  double a = pow(sin(dlat / 2), 2) + cos(lat1) * cos(lat2) * pow(sin(dlon / 2), 2);
-  double c = 2 * atan2(sqrt(a), sqrt(1 - a));
-
-  return R * c;
-}
 
 // Function to find the closest available point in map
 void find_closest_point(double given_lat, double given_lon,
@@ -157,6 +364,7 @@ void find_closest_point(double given_lat, double given_lon,
   * lat_result = closest_lat;
   * lon_result = closest_lon;
 }
+
 // Function to link points and create a track
 OsmGpsMapTrack * link_points(double lat1, double long1, double lat2, double long2) {
   OsmGpsMapTrack * track = osm_gps_map_track_new();
@@ -169,9 +377,31 @@ OsmGpsMapTrack * link_points(double lat1, double long1, double lat2, double long
   return track;
 }
 
+// Function to check if point is available or not 
+int get_index ( Graph* graph , double lat , double lon){
+  for (int i = 0; i < graph->numVertices; i += 1)
+  {
+  	if ( graph->vertices[i].lat == lat && graph->vertices[i].lon == lon ) {
+  	  return i ;
+  	}
+  }
+  return -1 ;
+}
+int get_empty_index ( Graph* graph){
+  for (int i = 0; i < graph->numVertices; i += 1)
+  {
+  	if ( graph->vertices[i].lat == 0.000000 ) {
+  	  return i ;
+  	}
+  }
+  return -1 ;
+
+}
+
+
 // Function to plot points from a file
-void file_plot(char * filename, OsmGpsMap * map) {
-  double lat1, long1, lat2, long2;
+void file_plot(char * filename, OsmGpsMap * map,Graph* graph) {
+  double lat1, lon1, lat2, lon2;
   OsmGpsMapTrack * track;
   char line[100]; // Assuming lines in the file won't exceed 100 characters
   FILE * ptr = fopen(filename, "r");
@@ -180,25 +410,54 @@ void file_plot(char * filename, OsmGpsMap * map) {
     return;
   }
   while (fgets(line, sizeof(line), ptr) != NULL) {
-    if (sscanf(line, "%lf %lf %lf %lf %*s %*s", & lat1, & long1, & lat2, & long2) == 4) {
-      //printf("%f %f %f %f\n", lat1, long1,lat2,long2);  
-      osm_gps_map_track_add(map, link_points(lat1, long1, lat2, long2)); //add track between 2 points
+    if (sscanf(line, "%lf %lf %lf %lf %*s %*s", & lat1, & lon1, & lat2, & lon2) == 4) { 
+      int indice1, indice2;
+      indice1 = get_index(graph , lat1,lon1);
+      indice2 = get_index(graph , lat2,lon2);
+      if (indice1 == -1)
+      {
+        int link_index1 = get_empty_index(graph);    
+        Point* p1 = malloc( sizeof(Point));
+        p1->lat = lat1;
+        p1->lon= lon1;
+      	graph->vertices[link_index1]= *p1;
+      	indice1 = link_index1;
+      }
+      if (indice2 == -1)
+      {   
+        int link_index2 = get_empty_index(graph);    
+        Point* p2 = malloc( sizeof(Point));
+        p2->lat = lat2;
+        p2->lon= lon2;
+      	graph->vertices[link_index2]= *p2;
+      	indice2 = link_index2;
+      }
+      addEdge(graph,indice1,indice2);
+      osm_gps_map_track_add(map, link_points(lat1, lon1, lat2, lon2)); //add track between 2 points
     } else {
       printf("Error: Failed to parse line: %s\n", line);
     }
   }
   fclose(ptr);
 }
+
+
+      
 // Function to manage all the mouse intercations in the map (test phase)
 static gboolean on_map_click(GtkWidget * widget, GdkEventButton * event, gpointer user_data) {
   int left_button =   (event->button == 1) ;
   int right_button =  (event->button == 3) || ((event->button == 1) && (event->state & GDK_CONTROL_MASK));
   if (event -> type == GDK_2BUTTON_PRESS && ( left_button || right_button)) {
+      CallbackData* data = (CallbackData*)user_data;
       OsmGpsMap * map = OSM_GPS_MAP(widget);
       OsmGpsMapPoint coord;
+      Graph* graph = data->graph;
+      int void_pos = data->void_pos;
+      int* list = data->list;
       float lat, lon;
       double * lat_result;
       double * lon_result;
+      
       lat_result = malloc(sizeof(double));
       lon_result = malloc(sizeof(double));
       osm_gps_map_convert_screen_to_geographic(map, event -> x, event -> y, & coord);
@@ -211,12 +470,40 @@ static gboolean on_map_click(GtkWidget * widget, GdkEventButton * event, gpointe
       if ( right_button ){
         // The graph and all the algos will be here      
         osm_gps_map_track_remove_all(map);
+        osm_gps_map_gps_clear (map);
+        dijkstra(graph,list[0],list[1],map);
+        
       }
       
-      find_closest_point(lat, lon, "/home/malek/Desktop/TD_INFO/IN104/UCSD-Graphs-master/data/maps/newbury_small.map", lat_result, lon_result);
 
       if ( left_button ){
-      osm_gps_map_gps_add(map, * lat_result, * lon_result, g_random_double_range(0, 360));}
+      ///// get empty index will be here soon
+      	if ( void_pos == 0 ) {
+      	find_closest_point(lat, lon, "/home/malek/Desktop/TD_INFO/IN104/UCSD-Graphs-master/data/maps/Full_Max.map", lat_result, lon_result);
+      	osm_gps_map_gps_add(map, * lat_result, * lon_result, g_random_double_range(0, 360));
+      	data->void_pos = 1;
+      	list[0]= get_index(graph,* lat_result, * lon_result);
+      	}
+      	if ( void_pos == 1 ) {
+      	find_closest_point(lat, lon, "/home/malek/Desktop/TD_INFO/IN104/UCSD-Graphs-master/data/maps/Full_Max.map", lat_result, lon_result);
+      	osm_gps_map_gps_add(map, * lat_result, * lon_result, g_random_double_range(0, 360));
+      	data->void_pos = 2;
+      	list[1]= get_index(graph,* lat_result, * lon_result);
+      	}
+      /*	if ( void_pos == 2 ) {
+      	 
+      	 
+      	}*/
+      	
+      	   
+      	    
+      	
+      	
+      
+      
+      
+      
+      }
       free(lat_result);
       free(lon_result);
     }
@@ -418,7 +705,7 @@ main(int argc, char ** argv) {
     "proxy-uri", g_getenv("http_proxy"),
     "user-agent", "mapviewer.c", // Always set user-agent, for better tile-usage compliance
     NULL);
-  g_object_set(G_OBJECT(map), "record-trip-history", FALSE, NULL); // No Record history
+ // g_object_set(G_OBJECT(map), "record-trip-history", FALSE, NULL); // No Record history
 
   osd = g_object_new(OSM_TYPE_GPS_MAP_OSD,
     "show-scale", TRUE,
@@ -516,7 +803,16 @@ main(int argc, char ** argv) {
     gtk_builder_get_object(builder, "star_yalign_adjustment"), "value-changed",
     G_CALLBACK(on_star_align_changed), (gpointer)
     "y-align");
-  g_signal_connect(map, "button-press-event", G_CALLBACK(on_map_click), NULL);
+  Graph* graph = createGraph(10628);
+  int* list = malloc ( sizeof(int)*2);
+  int void_pos = 0 ;
+  file_plot("/home/malek/Desktop/TD_INFO/IN104/UCSD-Graphs-master/data/maps/Full_Max.map",map,graph);
+    
+  CallbackData* data = g_new(CallbackData, 1);
+  data->graph = graph;
+  data->list = list;
+  data->void_pos = void_pos ;
+  g_signal_connect(map, "button-press-event", G_CALLBACK(on_map_click), data);
   g_signal_connect(G_OBJECT(map), "changed",
     G_CALLBACK(on_map_changed_event),
     (gpointer) gtk_builder_get_object(builder, "text_entry"));
@@ -527,7 +823,6 @@ main(int argc, char ** argv) {
   widget = GTK_WIDGET(gtk_builder_get_object(builder, "window1"));
   g_signal_connect(widget, "destroy",
     G_CALLBACK(on_close), (gpointer) map);
-  file_plot("/home/malek/Desktop/TD_INFO/IN104/UCSD-Graphs-master/data/maps/newbury_small.map", map);
   //Setup accelerators.
   ag = gtk_accel_group_new();
   gtk_accel_group_connect(ag, GDK_KEY_w, GDK_CONTROL_MASK, GTK_ACCEL_MASK,
@@ -536,10 +831,12 @@ main(int argc, char ** argv) {
     g_cclosure_new(gtk_main_quit, NULL, NULL));
   gtk_window_add_accel_group(GTK_WINDOW(widget), ag);
 
+
   gtk_widget_show_all(widget);
 
   g_log_set_handler("OsmGpsMap", G_LOG_LEVEL_MASK, g_log_default_handler, NULL);
   gtk_main();
-
   return 0;
 }
+
+  
