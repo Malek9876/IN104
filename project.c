@@ -1,21 +1,10 @@
-/* -*- Mode: C; indent-tabs-mode: nil; c-basic-offset: 4; tab-width: 4 -*- */
-/* vim:set et sw=4 ts=4 cino=t0,(0: */
 /*
- * main.c
- * Copyright (C) John Stowers 2008 <john.stowers@gmail.com>
+ * Copyright (C) Malek Belkahla 2024 <malek.belkahla@etudiant-enit.utm.tn>
  *
  * This is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License
  * as published by the Free Software Foundation; version 2.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- * 
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, see <http://www.gnu.org/licenses/>.
- */
+*/
 #include <stdio.h>
 
 #include <stdlib.h>
@@ -30,8 +19,8 @@
 
 #include "osm-gps-map.h"
 
-static OsmGpsMapSource_t opt_map_provider = OSM_GPS_MAP_SOURCE_OPENSTREETMAP;
-static gboolean opt_friendly_cache = FALSE;
+static OsmGpsMapSource_t opt_map_provider = OSM_GPS_MAP_SOURCE_GOOGLE_HYBRID;
+static gboolean opt_friendly_cache = TRUE;
 static gboolean opt_no_cache = FALSE;
 static char * opt_cache_base_dir = NULL;
 static gboolean opt_editable_tracks = FALSE;
@@ -89,6 +78,7 @@ static GOptionEntry entries[] = {
 #if!GTK_CHECK_VERSION(3, 22, 0)
 // use --gtk-debug=updates instead on newer GTK
 static gboolean opt_debug = FALSE;
+
 static GOptionEntry debug_entries[] = {
   {
     "debug",
@@ -201,8 +191,9 @@ void file_plot(char * filename, OsmGpsMap * map) {
 }
 // Function to manage all the mouse intercations in the map (test phase)
 static gboolean on_map_click(GtkWidget * widget, GdkEventButton * event, gpointer user_data) {
+  int left_button =   (event->button == 1) ;
   int right_button =  (event->button == 3) || ((event->button == 1) && (event->state & GDK_CONTROL_MASK));
-  if (event -> type == GDK_2BUTTON_PRESS) {
+  if (event -> type == GDK_2BUTTON_PRESS && ( left_button || right_button)) {
       OsmGpsMap * map = OSM_GPS_MAP(widget);
       OsmGpsMapPoint coord;
       float lat, lon;
@@ -222,9 +213,10 @@ static gboolean on_map_click(GtkWidget * widget, GdkEventButton * event, gpointe
         osm_gps_map_track_remove_all(map);
       }
       
-      find_closest_point(lat, lon, "/home/malek/Desktop/TD_INFO/IN104/UCSD-Graphs-master/data/maps/Full_Max.map", lat_result, lon_result);
+      find_closest_point(lat, lon, "/home/malek/Desktop/TD_INFO/IN104/UCSD-Graphs-master/data/maps/newbury_small.map", lat_result, lon_result);
 
-      osm_gps_map_gps_add(map, * lat_result, * lon_result, g_random_double_range(0, 360));
+      if ( left_button ){
+      osm_gps_map_gps_add(map, * lat_result, * lon_result, g_random_double_range(0, 360));}
       free(lat_result);
       free(lon_result);
     }
@@ -426,6 +418,7 @@ main(int argc, char ** argv) {
     "proxy-uri", g_getenv("http_proxy"),
     "user-agent", "mapviewer.c", // Always set user-agent, for better tile-usage compliance
     NULL);
+  g_object_set(G_OBJECT(map), "record-trip-history", FALSE, NULL); // No Record history
 
   osd = g_object_new(OSM_TYPE_GPS_MAP_OSD,
     "show-scale", TRUE,
@@ -440,12 +433,7 @@ main(int argc, char ** argv) {
   osm_gps_map_layer_add(OSM_GPS_MAP(map), osd);
   g_object_unref(G_OBJECT(osd));
 
-  //Add a second track for right clicks
-  rightclicktrack = osm_gps_map_track_new();
-
-  if (opt_editable_tracks)
-    g_object_set(rightclicktrack, "editable", TRUE, NULL);
-  osm_gps_map_track_add(OSM_GPS_MAP(map), rightclicktrack);
+  
 
   g_free(cachedir);
   g_free(cachebasedir);
@@ -539,7 +527,7 @@ main(int argc, char ** argv) {
   widget = GTK_WIDGET(gtk_builder_get_object(builder, "window1"));
   g_signal_connect(widget, "destroy",
     G_CALLBACK(on_close), (gpointer) map);
-  file_plot("/home/malek/Desktop/TD_INFO/IN104/UCSD-Graphs-master/data/maps/Full_Max.map", map);
+  file_plot("/home/malek/Desktop/TD_INFO/IN104/UCSD-Graphs-master/data/maps/newbury_small.map", map);
   //Setup accelerators.
   ag = gtk_accel_group_new();
   gtk_accel_group_connect(ag, GDK_KEY_w, GDK_CONTROL_MASK, GTK_ACCEL_MASK,
