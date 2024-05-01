@@ -57,25 +57,6 @@ Graph;
 
 
 
-// Most optimal route in map
-typedef struct Node {
-
-  int node_index;
-  
-  struct Node* next; 
-}
-Node;
-
-typedef struct Path_List {
-  int size;
-  
-  double distance;
-  
-  Node* head;
-
-
-}
-Path_List;
 
 typedef struct {
   Graph * graph;
@@ -86,49 +67,6 @@ typedef struct {
   // Add other variables you need to pass here
 }
 CallbackData;
-
-
-void path_list_init (Path_List *list) {
-
-  list->distance= 0.0;
-  list->size=0;
-  list->head = NULL;
-}
-
-int path_list_ins_next(Path_List *list, int node_index) {
-
-  Node *new_element;
-
-  /* Allocate storage for the element. */
-  new_element = malloc(sizeof(Node));
-
-  /* Insert the element into the list. */
-
-  new_element->node_index = node_index;
-
-  
-    /* Handle insertion at the head of the list. */
-
-    if (list->size == 0) {
-      list->head = new_element;
-      list->head->next = NULL;
-    }
-
-    new_element->next = list->head;
-    list->head = new_element;
-
-  
-
-  
-
-  return 0;
-
-}
-Node* path_list_next(Node* element) {
-  assert (element != NULL);
-  return element->next;
-}
-
 
 
 static OsmGpsMapSource_t opt_map_provider = OSM_GPS_MAP_SOURCE_GOOGLE_STREET;
@@ -264,7 +202,7 @@ void addEdge(Graph * graph, int src, int dest) {
 
 }
 
-void dijkstra(Graph * graph, int src, int dest, OsmGpsMap * map,int* Path) {
+void dijkstra(Graph * graph, int src, int dest, OsmGpsMap * map,int* Path,double* distance) {
 
   int numVertices = graph -> numVertices;
 
@@ -323,6 +261,7 @@ void dijkstra(Graph * graph, int src, int dest, OsmGpsMap * map,int* Path) {
   }
 
   printf("Shortest distance from point A to point B is %f\n", dist[dest]);
+  if (distance != NULL ) * distance = dist[dest];
   
 
   // Reconstruct and print the path
@@ -336,17 +275,21 @@ void dijkstra(Graph * graph, int src, int dest, OsmGpsMap * map,int* Path) {
     while (current != src) {
 
       printf("%d  -> ", current);
-      Path[j] = current ;
-
+      if (Path != NULL ) Path[j] = current ;
+      
       current = predecessor[current];
       j++;
 
       }
-
-    printf("%d\n", src); // Print the source node
+      if (Path != NULL ) Path[j] = current ; // Case of first point which is missing !!
+      j++ ;
+    printf("%d end\n", src); // Print the source node
+     if (Path != NULL ){
     for (int i = j-1 ; i >= 0 ; i--)
     {
     	osm_gps_map_gps_add(map, graph -> vertices[Path[i]].lat, graph -> vertices[Path[i]].lon, g_random_double_range(0, 360));
+    	printf("%d  ||",Path[i]);
+    }
     }
 
   } else {
@@ -490,6 +433,55 @@ void file_plot(char * filename, OsmGpsMap * map, Graph * graph) {
   fclose(ptr);
 }
 
+void free_path(int * Path){
+	for (int i  = 0; i < 500; i += 1)
+	{
+		Path[i] = 0 ;
+	}
+
+
+}
+
+void print_list(int * list,int size){
+	for (int i  = 0; i < size; i += 1)
+	{
+	    printf("\n") ;
+		printf(" || %d",list[i])  ;
+	}
+printf("\n") ;
+
+}
+// Function to sort the user given list
+void sort_list(Graph* graph ,int* list,OsmGpsMap * map,int size){
+	double min_distance = DBL_MAX;
+	double* dist ;
+	dist = malloc(sizeof(double));
+	int index ;
+	for (int i = 0; i < size-2; i += 1)
+	{
+		int j ;	
+		for (j = i+1; j < size; j += 1)
+		{
+			dijkstra(graph, list[i], list[j], map ,NULL,dist) ;
+			
+			
+			if ( *dist < min_distance ){
+			
+				min_distance = *dist;
+				index = j ;
+			
+					}
+		}
+		printf("%f",min_distance);
+		int tmp  = list[i+1];
+		list[i+1] = list[index];
+		list[index] = tmp ;
+	}
+
+
+free(dist);
+}
+
 // Function to manage all the mouse intercations in the map (test phase)
 static gboolean on_map_click(GtkWidget * widget, GdkEventButton * event, gpointer user_data) {
   int left_button = (event -> button == 1);
@@ -519,9 +511,19 @@ static gboolean on_map_click(GtkWidget * widget, GdkEventButton * event, gpointe
       // The graph and all the algos will be here      
       osm_gps_map_track_remove_all(map);
       osm_gps_map_gps_clear(map);
+      print_list(list,void_pos);
+      sort_list(graph ,list,map,void_pos);
+      print_list(list,void_pos);
       for (int j = 0; j < void_pos-1; j += 1)
       {
-      	dijkstra(graph, list[j], list[j+1], map,Path);
+        g_last_image = osm_gps_map_image_add (map,
+                                                  graph->vertices[list[j]].lat,
+                                                  graph->vertices[list[j]].lon,
+                                                  g_star_image);
+      	dijkstra(graph, list[j], list[j+1], map,Path,NULL);
+      	
+      	
+      	free_path(Path);
       	
       }
       
@@ -529,7 +531,7 @@ static gboolean on_map_click(GtkWidget * widget, GdkEventButton * event, gpointe
     }
 
     if (left_button) {
-      ///// get empty index will be here soon
+      
       
         find_closest_point(lat, lon, "/home/malek/Desktop/TD_INFO/IN104/UCSD-Graphs-master/data/maps/Full_Max.map", lat_result, lon_result);
         osm_gps_map_gps_add(map, * lat_result, * lon_result, g_random_double_range(0, 360));
@@ -838,7 +840,7 @@ main(int argc, char ** argv) {
   Graph * graph = createGraph(10628);
   int list[20];
   int void_pos = 0;
-  int Path[150] ;
+  int Path[500] ;
   
   
   file_plot("/home/malek/Desktop/TD_INFO/IN104/UCSD-Graphs-master/data/maps/Full_Max.map", map, graph);
