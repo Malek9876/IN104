@@ -69,7 +69,7 @@ typedef struct {
 CallbackData;
 
 
-static OsmGpsMapSource_t opt_map_provider = OSM_GPS_MAP_SOURCE_GOOGLE_STREET;
+static OsmGpsMapSource_t opt_map_provider = OSM_GPS_MAP_SOURCE_GOOGLE_STREET;double min_distance = DBL_MAX;
 static gboolean opt_friendly_cache = TRUE;
 static gboolean opt_no_cache = FALSE;
 static char * opt_cache_base_dir = NULL;
@@ -453,12 +453,13 @@ printf("\n") ;
 }
 // Function to sort the user given list
 void sort_list(Graph* graph ,int* list,OsmGpsMap * map,int size){
-	double min_distance = DBL_MAX;
+	
 	double* dist ;
 	dist = malloc(sizeof(double));
 	int index ;
 	for (int i = 0; i < size-2; i += 1)
 	{
+		double min_distance = DBL_MAX;
 		int j ;	
 		for (j = i+1; j < size; j += 1)
 		{
